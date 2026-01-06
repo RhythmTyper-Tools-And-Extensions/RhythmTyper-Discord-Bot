@@ -30,3 +30,15 @@ CREATE TABLE IF NOT EXISTS link_codes (
     code TEXT NOT NULL,
     expires_at BIGINT NOT NULL
 );
+
+## .env File
+
+```.env
+BOT_TOKEN=your_discord_bot_token
+
+PG_HOST=your_postgres_host
+PG_PORT=5432
+PG_DB=database_name
+PG_USER=database_user
+PG_PASS=database_password
+```
