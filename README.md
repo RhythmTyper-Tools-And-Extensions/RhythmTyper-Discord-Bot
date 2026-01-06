@@ -12,6 +12,7 @@ This repository is intended for **developers** who want to extend or build on to
 - aiohttp
 - asyncpg
 - PostgreSQL
+- Python-Dotenv
 
 ---
 
