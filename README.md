@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS link_codes (
     code TEXT NOT NULL,
     expires_at BIGINT NOT NULL
 );
+```
 
 ## .env File
 
