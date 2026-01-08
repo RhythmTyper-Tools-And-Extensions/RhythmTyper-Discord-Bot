@@ -321,7 +321,6 @@ async def rs(ctx: BridgeContext, target: str = None):
         await message.edit(content=None, embed=embed)
 
 
-
 @bot.bridge_command(name="user", description="Get a RhythmTyper profile.")
 async def user(ctx: BridgeContext, target: str = None):
     message = await ctx.respond("Fetching user...", ephemeral=True)
@@ -371,49 +370,49 @@ async def user(ctx: BridgeContext, target: str = None):
             await message.edit(content="Failed to fetch profile data. Try again later.")
             return
 
+        current_rank = profile_data['globalRank']
+        now = datetime.now(timezone.utc)
+
         rank_history = profile_data.get("rankHistory", [])
+        api_peak_rank = None
+        api_peak_date = None
         if rank_history:
-            api_peak_entry = min(rank_history, key=lambda x: x["rank"])
-            api_peak_rank = api_peak_entry["rank"]
-            api_peak_date = datetime.strptime(api_peak_entry["date"], "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        else:
-            api_peak_rank = None
-            api_peak_date = None
+            best_entry = min(rank_history, key=lambda x: x["rank"])
+            api_peak_rank = best_entry["rank"]
+            api_peak_date = datetime.strptime(best_entry["date"], "%Y-%m-%d").replace(tzinfo=timezone.utc)
 
         row = await conn.fetchrow("SELECT peak_rank, achieved_at FROM user_peak WHERE userid=$1", userid)
-        if row:
-            bot_peak_rank = row["peak_rank"]
-            bot_peak_date = row["achieved_at"]
-        else:
-            bot_peak_rank = None
-            bot_peak_date = None
+        db_peak_rank = row["peak_rank"] if row else None
+        db_peak_date = row["achieved_at"] if row else None
 
-        if api_peak_rank is not None and (bot_peak_rank is None or api_peak_rank < bot_peak_rank):
+        peak_rank = current_rank
+        peak_date = now
+
+        if api_peak_rank is not None and api_peak_rank < peak_rank:
             peak_rank = api_peak_rank
             peak_date = api_peak_date
-            await conn.execute(
-                """
-                INSERT INTO user_peak(userid, peak_rank, achieved_at)
-                VALUES($1, $2, $3)
-                ON CONFLICT(userid) DO UPDATE
-                SET peak_rank = EXCLUDED.peak_rank,
-                    achieved_at = EXCLUDED.achieved_at
-                """,
-                userid, api_peak_rank, api_peak_date
-            )
-        elif bot_peak_rank is not None:
-            peak_rank = bot_peak_rank
-            peak_date = bot_peak_date
-        else:
-            peak_rank = None
-            peak_date = None
 
-        peak_text = f"Peak Rank: #{peak_rank} (<t:{int(peak_date.timestamp())}:R>)" if peak_rank else "Peak Rank: N/A"
+        if db_peak_rank is not None and db_peak_rank < peak_rank:
+            peak_rank = db_peak_rank
+            peak_date = db_peak_date
+
+        await conn.execute(
+            """
+            INSERT INTO user_peak(userid, peak_rank, achieved_at)
+            VALUES($1, $2, $3)
+            ON CONFLICT(userid) DO UPDATE
+            SET peak_rank = EXCLUDED.peak_rank,
+                achieved_at = EXCLUDED.achieved_at
+            """,
+            userid, peak_rank, peak_date
+        )
+
+        peak_text = f"Peak Rank: #{peak_rank} (<t:{int(peak_date.timestamp())}:R>)"
 
         embed = Embed(colour=discord.Colour.blurple())
         embed.add_field(
             name="",
-            value=f"**▸ Rank:** #{profile_data['globalRank']} ({profile_data['country']}#{profile_data['countryRank']})\n"
+            value=f"**▸ Rank:** #{current_rank} ({profile_data['country']}#{profile_data['countryRank']})\n"
                   f"**▸ Peak Rank:** {peak_text}\n"
                   f"**▸ PP:** {round(profile_data['totalPP'],2)} **Acc**: {round(profile_data['accuracy'],2)}%\n"
                   f"**▸ Playcount:** {profile_data['playCount']}\n"
@@ -425,6 +424,7 @@ async def user(ctx: BridgeContext, target: str = None):
         )
 
         await message.edit(content=None, embed=embed)
+
 
 
 @bot.bridge_command()
