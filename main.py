@@ -1,8 +1,8 @@
 import discord, os, random, string, time, aiohttp, asyncio, asyncpg
 from datetime import datetime, timezone
 from discord import AllowedMentions, Embed
-from discord.ext import bridge
-from discord.ext.bridge import BridgeOption, BridgeContext
+from discord.ext import bridge, commands
+from discord.ext.bridge import BridgeContext
 from dotenv import load_dotenv
 
 TOP_CACHE_TTL = 60
@@ -26,16 +26,14 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = bridge.Bot(command_prefix=">", intents=intents)
 
-
 async def get_pool():
     return await asyncpg.create_pool(
+        host=os.getenv("PG_HOST"),
+        port=int(os.getenv("PG_PORT")),
         user=os.getenv("PG_USER"),
         password=os.getenv("PG_PASS"),
         database=os.getenv("PG_DB"),
-        host=os.getenv("PG_HOST"),
-        port=int(os.getenv("PG_PORT", 5432)),
     )
-
 
 pool = asyncio.get_event_loop().run_until_complete(get_pool())
 
@@ -102,6 +100,12 @@ async def fetch_api(url, retries=3, delay=2):
 async def on_ready():
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
 
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
+        await ctx.respond("Command does not exist.", ephemeral=True)
+    else:
+        raise error
 
 @bot.bridge_command(name="ping", description="Ping pong!")
 async def ping(ctx: BridgeContext):
@@ -112,42 +116,41 @@ async def ping(ctx: BridgeContext):
     name="link", description="Link your Discord account to your RhythmTyper account"
 )
 async def link(ctx: BridgeContext, username: str = None):
+    message = await ctx.respond("Fetching user...", ephemeral=True)
+
     async with pool.acquire() as conn:
         await conn.execute(
             "DELETE FROM link_codes WHERE expires_at < $1", int(time.time())
         )
         if not username:
-            await ctx.respond("You must provide a username.", ephemeral=True)
+            await message.edit("You must provide a username.")
             return
+        
         discord_id = int(ctx.author.id)
         row = await conn.fetchrow(
             "SELECT username FROM linked_users WHERE discord_id = $1", discord_id
         )
         if row:
-            await ctx.respond(
+            await message.edit(
                 f"You already linked an account to `{row['username']}`. Unlink it to link a new account.",
-                ephemeral=True,
             )
             return
         data = await fetch_api(
             f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/users/search?query={username}&limit=10"
         )
-        if not data:
-            await ctx.respond(
-                "Failed to fetch user data from the API. Try again later.",
-                ephemeral=True,
+        if data is None:
+            await message.edit(
+                "Failed to fetch user data from the API. Try again later."
             )
             return
-        userid = None
-        for user in data:
-            if user["username"].lower() == username.lower():
-                userid = user["userId"]
-                break
-        if not userid:
-            await ctx.respond(
-                f"No user found with username `{username}`.", ephemeral=True
+
+        userid = next((u["userId"] for u in data if u["username"].lower() == username.lower()), None)
+        if userid is None:
+            await message.edit(
+                f"No user found with username `{username}`."
             )
             return
+
         code = generate_code()
         expires_at = int(time.time()) + 300
         await conn.execute(
@@ -162,14 +165,15 @@ async def link(ctx: BridgeContext, username: str = None):
             code,
             expires_at,
         )
-        await ctx.respond(
+        await message.edit(
             f"Your verification code: `{code}`. Put this in your RhythmTyper profile description and run `/verify`.",
-            ephemeral=True,
         )
 
 
 @bot.bridge_command(name="verify", description="Verify code in description")
 async def link_verify(ctx: BridgeContext):
+    message = await ctx.respond("Fetching user...", ephemeral=True)
+
     discord_id = int(ctx.author.id)
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
@@ -177,9 +181,8 @@ async def link_verify(ctx: BridgeContext):
             discord_id,
         )
         if not row:
-            await ctx.respond(
+            await message.edit(
                 "No pending verification found. Use `/link username` first.",
-                ephemeral=True,
             )
             return
         userid, code, expires_at = row["userid"], row["code"], row["expires_at"]
@@ -187,17 +190,16 @@ async def link_verify(ctx: BridgeContext):
             await conn.execute(
                 "DELETE FROM link_codes WHERE discord_id = $1", discord_id
             )
-            await ctx.respond(
+            await message.edit(
                 "Your verification code expired. Generate a new one with `/link username`",
-                ephemeral=True,
             )
             return
         profile_data = await fetch_api(
             f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/profile/{userid}"
         )
         if not profile_data:
-            await ctx.respond(
-                "Failed to fetch profile data. Try again later.", ephemeral=True
+            await message.edit(
+                "Failed to fetch profile data. Try again later."
             )
             return
         if code in profile_data.get("profileDescription", ""):
@@ -215,43 +217,46 @@ async def link_verify(ctx: BridgeContext):
             await conn.execute(
                 "DELETE FROM link_codes WHERE discord_id = $1", discord_id
             )
-            await ctx.respond(
+            await message.edit(
                 f"Successfully linked your account to `{profile_data['username']}`.",
-                ephemeral=True,
             )
         else:
-            await ctx.respond(
-                "Verification code not found in profile description.", ephemeral=True
+            await message.edit(
+                "Verification code not found in profile description."
             )
 
 
 @bot.bridge_command(name="unlink", description="Unlink your linked RhythmTyper account")
 async def unlink(ctx: BridgeContext):
+    message = await ctx.respond("Unlinking account...", ephemeral=True)
+
     discord_id = int(ctx.author.id)
     async with pool.acquire() as conn:
         result = await conn.execute(
             "DELETE FROM linked_users WHERE discord_id = $1", discord_id
         )
         if "0" in result:
-            await ctx.respond(
-                "You don't have a linked account to unlink.", ephemeral=True
+            await message.edit(
+                "You don't have a linked account to unlink."
             )
         else:
-            await ctx.respond("Successfully unlinked your account.", ephemeral=True)
+            await message.edit("Successfully unlinked your account.")
 
 
 @bot.bridge_command(name="rs", description="Get recent score of a RhythmTyper profile.")
 async def rs(ctx: BridgeContext, user: discord.User = None):
     target = user or ctx.author
+
+    message = await ctx.respond("Fetching recent score...", ephemeral=True)
+
     discord_id = int(target.id)
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT userid FROM linked_users WHERE discord_id = $1", discord_id
         )
         if not row:
-            await ctx.respond(
+            await message.edit(
                 f"{target.mention} does not have a linked RhythmTyper account.",
-                ephemeral=True,
                 allowed_mentions=AllowedMentions.none(),
             )
             return
@@ -260,13 +265,13 @@ async def rs(ctx: BridgeContext, user: discord.User = None):
             f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/profile/{userid}"
         )
         if not profile_data:
-            await ctx.respond(
-                "Failed to fetch profile data. Try again later.", ephemeral=True
+            await message.edit(
+                "Failed to fetch profile data. Try again later."
             )
             return
         recent_plays = profile_data.get("recentPlays", [])
         if not recent_plays:
-            await ctx.respond("No recent plays found for this user.", ephemeral=True)
+            await message.edit("No recent plays found for this user.")
             return
         latest_play = max(recent_plays, key=lambda x: x["at"])
         play_time = datetime.fromisoformat(latest_play["at"].replace("Z", "+00:00"))
@@ -288,21 +293,23 @@ async def rs(ctx: BridgeContext, user: discord.User = None):
         )
 
         print(latest_play)
-        await ctx.respond(embed=embed)
+        await message.edit(content=None, embed=embed)
 
 
 @bot.bridge_command(name="user", description="Get a RhythmTyper profile.")
 async def user(ctx: BridgeContext, user: discord.User = None):
     target = user or ctx.author
+
+    message = await ctx.respond("Fetching user...", ephemeral=True)
+    
     discord_id = int(target.id)
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT userid FROM linked_users WHERE discord_id = $1", discord_id
         )
         if not row:
-            await ctx.respond(
+            await message.edit(
                 f"{target.mention} does not have a linked RhythmTyper account.",
-                ephemeral=True,
                 allowed_mentions=AllowedMentions.none(),
             )
             return
@@ -311,8 +318,8 @@ async def user(ctx: BridgeContext, user: discord.User = None):
             f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/profile/{userid}"
         )
         if not profile_data:
-            await ctx.respond(
-                "Failed to fetch profile data. Try again later.", ephemeral=True
+            await message.edit(
+                "Failed to fetch profile data. Try again later."
             )
             return
         rank_history = profile_data.get("rankHistory", [])
@@ -334,16 +341,18 @@ async def user(ctx: BridgeContext, user: discord.User = None):
             name=f"RhythmTyper Profile for {profile_data['username']}",
             icon_url=flag_url(profile_data["country"]),
         )
-        await ctx.respond(embed=embed)
+        await message.edit(content=None, embed=embed)
 
 
 @bot.bridge_command()
 async def lb(ctx: BridgeContext, metric: str = None, rank: int = None):
     metric = metric.lower() if metric and metric.lower() in ["pp", "score"] else "pp"
 
+    message = await ctx.respond("Fetching leaderboard...", ephemeral=True)
+
     top_msg, data = await get_top10(metric)
     if not top_msg:
-        await ctx.respond("Failed to fetch leaderboard.", ephemeral=True)
+        await message.edit("Failed to fetch leaderboard.")
         return
 
     if rank:
@@ -356,18 +365,18 @@ async def lb(ctx: BridgeContext, metric: str = None, rank: int = None):
                 f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/leaderboard?limit={page_limit}&offset={offset}&sortBy={'totalPP' if metric=='pp' else 'rankedScore'}"
             )
             if not page or (rank - 1) % page_limit >= len(page):
-                await ctx.respond(f"Rank {rank} not found.", ephemeral=True)
+                await message.edit(f"Rank {rank} not found.")
                 return
             entry = page[(rank - 1) % page_limit]
 
         msg = f"{rank}. {entry['username']} — {round(entry['totalPP'],2)} PP" if metric == "pp" else f"{rank}. {entry['username']} — {entry['rankedScore']:,} Score"
         embed = Embed(colour=discord.Colour.purple())
         embed.add_field(name=f"Leaderboard ({metric.upper()})", value=msg)
-        await ctx.respond(embed=embed)
+        await message.edit(content=None, embed=embed)
         return
 
     embed = Embed(colour=discord.Colour.purple())
     embed.add_field(name=f"Top 10 Leaderboard ({metric.upper()})", value=top_msg)
-    await ctx.respond(embed=embed)
+    await message.edit(content=None, embed=embed)
 
 bot.run(os.getenv("BOT_TOKEN"))
