@@ -373,14 +373,42 @@ async def user(ctx: BridgeContext, target: str = None):
 
         rank_history = profile_data.get("rankHistory", [])
         if rank_history:
-            peak_entry = min(rank_history, key=lambda x: x["rank"])
-            peak_rank = peak_entry["rank"]
-            peak_date = datetime.strptime(peak_entry["date"], "%Y-%m-%d").replace(
-                tzinfo=timezone.utc
-            )
-            peak_text = f"Peak Rank: #{peak_rank} (<t:{int(peak_date.timestamp())}:R>)"
+            api_peak_entry = min(rank_history, key=lambda x: x["rank"])
+            api_peak_rank = api_peak_entry["rank"]
+            api_peak_date = datetime.strptime(api_peak_entry["date"], "%Y-%m-%d").replace(tzinfo=timezone.utc)
         else:
-            peak_text = "Peak Rank: N/A"
+            api_peak_rank = None
+            api_peak_date = None
+
+        row = await conn.fetchrow("SELECT peak_rank, achieved_at FROM user_peak WHERE userid=$1", userid)
+        if row:
+            bot_peak_rank = row["peak_rank"]
+            bot_peak_date = row["achieved_at"]
+        else:
+            bot_peak_rank = None
+            bot_peak_date = None
+
+        if api_peak_rank is not None and (bot_peak_rank is None or api_peak_rank < bot_peak_rank):
+            peak_rank = api_peak_rank
+            peak_date = api_peak_date
+            await conn.execute(
+                """
+                INSERT INTO user_peak(userid, peak_rank, achieved_at)
+                VALUES($1, $2, $3)
+                ON CONFLICT(userid) DO UPDATE
+                SET peak_rank = EXCLUDED.peak_rank,
+                    achieved_at = EXCLUDED.achieved_at
+                """,
+                userid, api_peak_rank, api_peak_date
+            )
+        elif bot_peak_rank is not None:
+            peak_rank = bot_peak_rank
+            peak_date = bot_peak_date
+        else:
+            peak_rank = None
+            peak_date = None
+
+        peak_text = f"Peak Rank: #{peak_rank} (<t:{int(peak_date.timestamp())}:R>)" if peak_rank else "Peak Rank: N/A"
 
         embed = Embed(colour=discord.Colour.blurple())
         embed.add_field(
@@ -397,7 +425,6 @@ async def user(ctx: BridgeContext, target: str = None):
         )
 
         await message.edit(content=None, embed=embed)
-
 
 
 @bot.bridge_command()
