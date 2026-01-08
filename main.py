@@ -245,20 +245,24 @@ async def unlink(ctx: BridgeContext):
 
 @bot.bridge_command(name="rs", description="Get recent score of a RhythmTyper profile.")
 async def rs(ctx: BridgeContext, target: str = None):
-    if target:
+    message = await ctx.respond("Fetching user...", ephemeral=True)
+
+    using_discord = False
+    discord_id = None
+
+    if target and target.startswith("<@") and target.endswith(">"):
         try:
             resolved_user = await commands.MemberConverter().convert(ctx, target)
             discord_id = resolved_user.id
             using_discord = True
         except commands.BadArgument:
-            discord_id = None
             using_discord = False
+            discord_id = None
     else:
         resolved_user = ctx.author
-        discord_id = ctx.author.id
-        using_discord = True
-
-    message = await ctx.respond("Fetching recent score...", ephemeral=True)
+        if not target:
+            discord_id = ctx.author.id
+            using_discord = True
 
     async with pool.acquire() as conn:
         if using_discord:
@@ -320,24 +324,27 @@ async def rs(ctx: BridgeContext, target: str = None):
 
 @bot.bridge_command(name="user", description="Get a RhythmTyper profile.")
 async def user(ctx: BridgeContext, target: str = None):
-    if target:
+    message = await ctx.respond("Fetching user...", ephemeral=True)
+
+    using_discord = False
+    discord_id = None
+
+    if target and target.startswith("<@") and target.endswith(">"):
         try:
             resolved_user = await commands.MemberConverter().convert(ctx, target)
             discord_id = resolved_user.id
             using_discord = True
         except commands.BadArgument:
-            discord_id = None
             using_discord = False
+            discord_id = None
     else:
         resolved_user = ctx.author
-        discord_id = ctx.author.id
-        using_discord = True
-
-    message = await ctx.respond("Fetching user...", ephemeral=True)
+        if not target:
+            discord_id = ctx.author.id
+            using_discord = True
 
     async with pool.acquire() as conn:
         if using_discord:
-            # Lookup by Discord ID
             row = await conn.fetchrow(
                 "SELECT userid FROM linked_users WHERE discord_id = $1", discord_id
             )
