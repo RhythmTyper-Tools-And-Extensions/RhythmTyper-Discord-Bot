@@ -166,7 +166,7 @@ async def link(ctx: BridgeContext, username: str = None):
             expires_at,
         )
         await message.edit(content=
-            f"Your verification code: `{code}`. Put this in your RhythmTyper profile description and run `/verify`.",
+            f"Your verification code: `{code}`. Put this in your RhythmTyper profile description and run `/verify or >verify`.",
         )
 
 
@@ -415,8 +415,7 @@ async def user(ctx: BridgeContext, target: str = None):
             value=f"**▸ Rank:** #{current_rank} ({profile_data['country']}#{profile_data['countryRank']})\n"
                   f"**▸ Peak Rank:** {peak_text}\n"
                   f"**▸ PP:** {round(profile_data['totalPP'],2)} **Acc**: {round(profile_data['accuracy'],2)}%\n"
-                  f"**▸ Playcount:** {profile_data['playCount']}\n"
-                  f"**▸ Ranks:** {profile_data['playCount']} ({round(profile_data['playTime']/3600,2)} hrs)"
+                  f"**▸ Playcount:** {profile_data['playCount']} ({round(profile_data['playTime']/3600,2)} hrs)"
         )
         embed.set_author(
             name=f"RhythmTyper Profile for {profile_data['username']}",
