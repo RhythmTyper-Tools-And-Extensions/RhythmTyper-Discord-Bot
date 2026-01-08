@@ -123,7 +123,7 @@ async def link(ctx: BridgeContext, username: str = None):
             "DELETE FROM link_codes WHERE expires_at < $1", int(time.time())
         )
         if not username:
-            await message.edit("You must provide a username.")
+            await message.edit(content="You must provide a username.")
             return
         
         discord_id = int(ctx.author.id)
@@ -131,7 +131,7 @@ async def link(ctx: BridgeContext, username: str = None):
             "SELECT username FROM linked_users WHERE discord_id = $1", discord_id
         )
         if row:
-            await message.edit(
+            await message.edit(content=
                 f"You already linked an account to `{row['username']}`. Unlink it to link a new account.",
             )
             return
@@ -139,14 +139,14 @@ async def link(ctx: BridgeContext, username: str = None):
             f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/users/search?query={username}&limit=10"
         )
         if data is None:
-            await message.edit(
+            await message.edit(content=
                 "Failed to fetch user data from the API. Try again later."
             )
             return
 
         userid = next((u["userId"] for u in data if u["username"].lower() == username.lower()), None)
         if userid is None:
-            await message.edit(
+            await message.edit(content=
                 f"No user found with username `{username}`."
             )
             return
@@ -165,7 +165,7 @@ async def link(ctx: BridgeContext, username: str = None):
             code,
             expires_at,
         )
-        await message.edit(
+        await message.edit(content=
             f"Your verification code: `{code}`. Put this in your RhythmTyper profile description and run `/verify`.",
         )
 
@@ -181,7 +181,7 @@ async def link_verify(ctx: BridgeContext):
             discord_id,
         )
         if not row:
-            await message.edit(
+            await message.edit(content=
                 "No pending verification found. Use `/link username` first.",
             )
             return
@@ -190,7 +190,7 @@ async def link_verify(ctx: BridgeContext):
             await conn.execute(
                 "DELETE FROM link_codes WHERE discord_id = $1", discord_id
             )
-            await message.edit(
+            await message.edit(content=
                 "Your verification code expired. Generate a new one with `/link username`",
             )
             return
@@ -198,7 +198,7 @@ async def link_verify(ctx: BridgeContext):
             f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/profile/{userid}"
         )
         if not profile_data:
-            await message.edit(
+            await message.edit(content=
                 "Failed to fetch profile data. Try again later."
             )
             return
@@ -217,11 +217,11 @@ async def link_verify(ctx: BridgeContext):
             await conn.execute(
                 "DELETE FROM link_codes WHERE discord_id = $1", discord_id
             )
-            await message.edit(
+            await message.edit(content=
                 f"Successfully linked your account to `{profile_data['username']}`.",
             )
         else:
-            await message.edit(
+            await message.edit(content=
                 "Verification code not found in profile description."
             )
 
@@ -236,92 +236,134 @@ async def unlink(ctx: BridgeContext):
             "DELETE FROM linked_users WHERE discord_id = $1", discord_id
         )
         if "0" in result:
-            await message.edit(
+            await message.edit(content=
                 "You don't have a linked account to unlink."
             )
         else:
-            await message.edit("Successfully unlinked your account.")
+            await message.edit(content="Successfully unlinked your account.")
 
 
 @bot.bridge_command(name="rs", description="Get recent score of a RhythmTyper profile.")
-async def rs(ctx: BridgeContext, user: discord.User = None):
-    target = user or ctx.author
+async def rs(ctx: BridgeContext, target: str = None):
+    if target:
+        try:
+            resolved_user = await commands.MemberConverter().convert(ctx, target)
+            discord_id = resolved_user.id
+            using_discord = True
+        except commands.BadArgument:
+            discord_id = None
+            using_discord = False
+    else:
+        resolved_user = ctx.author
+        discord_id = ctx.author.id
+        using_discord = True
 
     message = await ctx.respond("Fetching recent score...", ephemeral=True)
 
-    discord_id = int(target.id)
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT userid FROM linked_users WHERE discord_id = $1", discord_id
-        )
-        if not row:
-            await message.edit(
-                f"{target.mention} does not have a linked RhythmTyper account.",
-                allowed_mentions=AllowedMentions.none(),
+        if using_discord:
+            row = await conn.fetchrow(
+                "SELECT userid FROM linked_users WHERE discord_id = $1", discord_id
             )
-            return
-        userid = row["userid"]
+            if not row:
+                await message.edit(
+                    content=f"{resolved_user.mention} does not have a linked RhythmTyper account.",
+                    allowed_mentions=AllowedMentions.none()
+                )
+                return
+            userid = row["userid"]
+        else:
+            data = await fetch_api(
+                f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/users/search?query={target}&limit=1"
+            )
+            if not data:
+                await message.edit(content=f"No RhythmTyper user found with username `{target}`.")
+                return
+            userid = data[0]["userId"]
+
         profile_data = await fetch_api(
             f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/profile/{userid}"
         )
         if not profile_data:
-            await message.edit(
-                "Failed to fetch profile data. Try again later."
-            )
+            await message.edit(content="Failed to fetch profile data. Try again later.")
             return
+
         recent_plays = profile_data.get("recentPlays", [])
         if not recent_plays:
-            await message.edit("No recent plays found for this user.")
+            await message.edit(content="No recent plays found for this user.")
             return
+
         latest_play = max(recent_plays, key=lambda x: x["at"])
         play_time = datetime.fromisoformat(latest_play["at"].replace("Z", "+00:00"))
         emoji = grade_emojis.get(latest_play['gr'], "")
         mods = latest_play['mods']
         mod_text = "+NM" if not mods else "+" + "".join(mods)
+
         embed = Embed(
             title=latest_play["bt"],
             url=f"https://rhythmtyper.net/beatmap/{latest_play['bid']}",
             colour=discord.Colour.green(),
         )
         embed.set_author(
-            name=f"{profile_data['username']}: {round(profile_data['totalPP'], 2)}pp {profile_data['username']} (#{profile_data['globalRank']} {profile_data['country']}#{profile_data['countryRank']})",
+            name=f"{profile_data['username']}: {round(profile_data['totalPP'], 2)}pp "
+                 f"(#{profile_data['globalRank']} {profile_data['country']}#{profile_data['countryRank']})",
             icon_url=flag_url(profile_data["country"]),
         )
         embed.add_field(
             name="",
-            value=f"{emoji} **{mod_text}\u2003{round(latest_play['acc'], 2)}%\u2003{latest_play['sc']:,}\u2003<t:{int(play_time.timestamp())}:R>**\n**{round(latest_play['pp'], 2)}pp\u2003combo: {latest_play['cb']}**"
+            value=f"{emoji} **{mod_text}\u2003{round(latest_play['acc'], 2)}%\u2003{latest_play['sc']:,}\u2003<t:{int(play_time.timestamp())}:R>**\n"
+                  f"**{round(latest_play['pp'], 2)}pp\u2003combo: {latest_play['cb']}**"
         )
-
-        print(latest_play)
         await message.edit(content=None, embed=embed)
 
 
+
 @bot.bridge_command(name="user", description="Get a RhythmTyper profile.")
-async def user(ctx: BridgeContext, user: discord.User = None):
-    target = user or ctx.author
+async def user(ctx: BridgeContext, target: str = None):
+    if target:
+        try:
+            resolved_user = await commands.MemberConverter().convert(ctx, target)
+            discord_id = resolved_user.id
+            using_discord = True
+        except commands.BadArgument:
+            discord_id = None
+            using_discord = False
+    else:
+        resolved_user = ctx.author
+        discord_id = ctx.author.id
+        using_discord = True
 
     message = await ctx.respond("Fetching user...", ephemeral=True)
-    
-    discord_id = int(target.id)
+
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT userid FROM linked_users WHERE discord_id = $1", discord_id
-        )
-        if not row:
-            await message.edit(
-                f"{target.mention} does not have a linked RhythmTyper account.",
-                allowed_mentions=AllowedMentions.none(),
+        if using_discord:
+            # Lookup by Discord ID
+            row = await conn.fetchrow(
+                "SELECT userid FROM linked_users WHERE discord_id = $1", discord_id
             )
-            return
-        userid = row["userid"]
+            if not row:
+                await message.edit(
+                    content=f"{resolved_user.mention} does not have a linked RhythmTyper account.",
+                    allowed_mentions=AllowedMentions.none()
+                )
+                return
+            userid = row["userid"]
+        else:
+            data = await fetch_api(
+                f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/users/search?query={target}&limit=1"
+            )
+            if not data:
+                await message.edit(content=f"No RhythmTyper user found with username `{target}`.")
+                return
+            userid = data[0]["userId"]
+
         profile_data = await fetch_api(
             f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/profile/{userid}"
         )
         if not profile_data:
-            await message.edit(
-                "Failed to fetch profile data. Try again later."
-            )
+            await message.edit(content="Failed to fetch profile data. Try again later.")
             return
+
         rank_history = profile_data.get("rankHistory", [])
         if rank_history:
             peak_entry = min(rank_history, key=lambda x: x["rank"])
@@ -332,16 +374,23 @@ async def user(ctx: BridgeContext, user: discord.User = None):
             peak_text = f"Peak Rank: #{peak_rank} (<t:{int(peak_date.timestamp())}:R>)"
         else:
             peak_text = "Peak Rank: N/A"
+
         embed = Embed(colour=discord.Colour.blurple())
         embed.add_field(
             name="",
-            value=f"**▸ Rank:** #{profile_data['globalRank']} ({profile_data['country']}#{profile_data['countryRank']})\n**▸ Peak Rank:** {peak_text}\n**▸ PP:** {round(profile_data['totalPP'],2)} **Acc**: {round(profile_data['accuracy'],2)}%\n**▸ Playcount:** {profile_data['playCount']}\n**▸ Ranks:** {profile_data['playCount']} ({round(profile_data['playTime']/3600,2)} hrs)",
+            value=f"**▸ Rank:** #{profile_data['globalRank']} ({profile_data['country']}#{profile_data['countryRank']})\n"
+                  f"**▸ Peak Rank:** {peak_text}\n"
+                  f"**▸ PP:** {round(profile_data['totalPP'],2)} **Acc**: {round(profile_data['accuracy'],2)}%\n"
+                  f"**▸ Playcount:** {profile_data['playCount']}\n"
+                  f"**▸ Ranks:** {profile_data['playCount']} ({round(profile_data['playTime']/3600,2)} hrs)"
         )
         embed.set_author(
             name=f"RhythmTyper Profile for {profile_data['username']}",
-            icon_url=flag_url(profile_data["country"]),
+            icon_url=flag_url(profile_data["country"])
         )
+
         await message.edit(content=None, embed=embed)
+
 
 
 @bot.bridge_command()
@@ -352,7 +401,7 @@ async def lb(ctx: BridgeContext, metric: str = None, rank: int = None):
 
     top_msg, data = await get_top10(metric)
     if not top_msg:
-        await message.edit("Failed to fetch leaderboard.")
+        await message.edit(content="Failed to fetch leaderboard.")
         return
 
     if rank:
@@ -365,7 +414,7 @@ async def lb(ctx: BridgeContext, metric: str = None, rank: int = None):
                 f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/leaderboard?limit={page_limit}&offset={offset}&sortBy={'totalPP' if metric=='pp' else 'rankedScore'}"
             )
             if not page or (rank - 1) % page_limit >= len(page):
-                await message.edit(f"Rank {rank} not found.")
+                await message.edit(content=f"Rank {rank} not found.")
                 return
             entry = page[(rank - 1) % page_limit]
 
