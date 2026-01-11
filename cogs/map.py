@@ -15,6 +15,7 @@ class MapView(discord.ui.View):
         options = [
             SelectOption(
                 label=map_data['songName'][:100],
+                value=map_data['id'],
                 description=f"Mapper: {map_data['mapper']}, ID: {map_data['id']}"[:100]
             )
             for map_data in maps
@@ -32,7 +33,6 @@ class MapView(discord.ui.View):
     async def select_callback(self, interaction: discord.Interaction):
         selected_label = interaction.data['values'][0]
         selected_map = next((m for m in self.maps if m['songName'] == selected_label), None)
-        print(selected_map)
         if selected_map:
             await interaction.response.edit_message(
                 content=f"{selected_map['songName']} mapped by {selected_map['mapper']}\n"
@@ -44,7 +44,7 @@ class Map(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @bridge.bridge_command(name="map")
+    @bridge.bridge_command(name="map", aliases=["m"])
     async def map(
             self,
             ctx,
@@ -57,7 +57,7 @@ class Map(commands.Cog):
         message = await ctx.respond("Fetching map...")
 
         maps = await fetch_api(
-            f"https://us-central1-rhythm-typer.cloudfunctions.net/api/getBeatmaps?limit=12&status={status}&sortBy=relevance&showExplicit=true&language=all&search={keywords}")
+            f"https://us-central1-rhythm-typer.cloudfunctions.net/api/getBeatmaps?limit=50&status={status}&sortBy=relevance&showExplicit=true&language=all&search={keywords}")
         debug(maps)
 
         if not maps["beatmaps"]:
