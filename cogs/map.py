@@ -31,13 +31,11 @@ class MapView(discord.ui.View):
         self.add_item(select)
 
     async def select_callback(self, interaction: discord.Interaction):
-        selected_label = interaction.data['values'][0]
-        selected_map = next((m for m in self.maps if m['songName'] == selected_label), None)
+        selected_id = interaction.data['values'][0]
+        selected_map = next((m for m in self.maps if m['id'] == selected_id), None)
         if selected_map:
             await interaction.response.edit_message(
-                content=f"{selected_map['songName']} mapped by {selected_map['mapper']}\n"
-                        f"https://rhythmtyper.net/beatmap/{selected_map['id']}",
-                view=self
+                content=f"You selected: {selected_map['songName']} by {selected_map['mapper']}\nhttps://rhythmtyper.net/beatmap/{selected_map['id']}"
             )
 
 class Map(commands.Cog):
