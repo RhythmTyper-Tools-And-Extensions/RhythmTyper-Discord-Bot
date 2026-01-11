@@ -7,7 +7,7 @@ This repository is intended for **developers** who want to extend or build on to
 
 ## Tech Stack
 
-- Python 3.13+
+- Python 3.11+
 - py-cord
 - aiohttp
 - asyncpg
