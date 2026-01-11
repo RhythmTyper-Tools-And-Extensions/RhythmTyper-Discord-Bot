@@ -21,16 +21,27 @@ This repository is intended for **developers** who want to extend or build on to
 ```sql
 CREATE TABLE IF NOT EXISTS linked_users (
     discord_id BIGINT PRIMARY KEY,
-    userid BIGINT NOT NULL,
-    username TEXT NOT NULL
+    userid TEXT NOT NULL UNIQUE,
+    username TEXT NOT NULL,
+    linked_at TIMESTAMP DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS link_codes (
     discord_id BIGINT PRIMARY KEY,
-    userid BIGINT NOT NULL,
+    userid TEXT NOT NULL,
     code TEXT NOT NULL,
     expires_at BIGINT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_link_codes_expiry ON link_codes (expires_at);
+
+CREATE TABLE IF NOT EXISTS user_peak (
+    userid TEXT PRIMARY KEY,
+    peak_rank INTEGER NOT NULL,
+    achieved_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_peak_achieved_at ON user_peak (achieved_at);
 ```
 
 ## .env File
