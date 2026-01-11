@@ -37,13 +37,6 @@ async def on_ready():
     await init_db()
     cleanup_task = bot.loop.create_task(cleanup_link_codes())
 
-    if os.name != "nt":
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            bot.loop.add_signal_handler(
-                sig,
-                lambda: asyncio.create_task(shutdown())
-            )
-
     latency = round(bot.latency * 1000)
     users = sum(g.member_count or 0 for g in bot.guilds)
 
@@ -66,6 +59,10 @@ async def on_ready():
     row("Platform", f"{platform.system()} {platform.release()}")
     print()
 
+@bot.event
+async def on_disconnect():
+    await shutdown()
+
 async def shutdown():
     global shutdown_called
     if shutdown_called:
@@ -77,14 +74,17 @@ async def shutdown():
     if cleanup_task:
         cleanup_task.cancel()
 
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
+
     await close_api()
     await close_db()
     await bot.close()
 
 try:
     bot.run(os.getenv("TOKEN"))
-except KeyboardInterrupt:
-    asyncio.run(shutdown())
 except discord.LoginFailure:
     error("Invalid token. Check your .env file.")
 except Exception as e:

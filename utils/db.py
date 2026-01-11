@@ -56,6 +56,9 @@ async def cleanup_link_codes():
                 int(time.time())
             )
             info("Expired link codes cleaned")
+            await asyncio.sleep(300)
+        except asyncio.CancelledError:
+            info("Link code cleanup task cancelled")
+            raise
         except Exception as e:
             error(f"Link code cleanup failed: {e}")
-        await asyncio.sleep(300)
