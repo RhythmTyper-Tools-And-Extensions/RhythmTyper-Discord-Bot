@@ -86,6 +86,6 @@ async def shutdown():
 try:
     bot.run(os.getenv("TOKEN"))
 except discord.LoginFailure:
-    error("Invalid token. Check your .env file.")
+    error("Invalid token. Check your main.env file.")
 except Exception as e:
     error(f"Bot failed to start: {e}")
