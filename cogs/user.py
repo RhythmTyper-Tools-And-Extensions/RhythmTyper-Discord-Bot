@@ -7,7 +7,7 @@ from config import grade_emojis
 
 from utils.api import fetch_api
 from utils.db import fetchrow, execute
-from utils.logger import info, warn, error
+from utils.logger import info, warn, error, debug
 from utils.resolve import resolve_target
 from utils.flags import flag_url
 
@@ -231,7 +231,7 @@ class User(commands.Cog):
 
     @bridge.bridge_command(name="recent", description="Show recent score by user", aliases=["rs"])
     async def recent(self, ctx, target: str = None):
-        message = await ctx.respond("Fetching user...", ephemeral=True)
+        message = await ctx.respond("Fetching recent score...", ephemeral=True)
 
         try:
             target_info = await resolve_target(ctx, target)
@@ -256,11 +256,12 @@ class User(commands.Cog):
         emoji = grade_emojis.get(latest_play['gr'], "")
         mods = latest_play['mods']
         mod_text = "+NM" if not mods else "+" + "".join(mods)
-
-        print(latest_play)
+        total_seconds = int(latest_play['len'])
+        minutes, seconds = divmod(total_seconds, 60)
+        length_fmt = f"{minutes}:{seconds:02d}"
 
         embed = Embed(
-            title=latest_play["bt"],
+            title=f"{latest_play['bt']} [{latest_play['sr']:.2f}★]",
             url=f"https://rhythmtyper.net/beatmap/{latest_play['bid']}",
             colour=discord.Colour.green(),
         )
@@ -272,11 +273,11 @@ class User(commands.Cog):
         )
         embed.add_field(
             name=f"{emoji} {mod_text}\u2003{latest_play['sc']:,}\u2003{round(latest_play['acc'], 2)}%\u2003<t:{int(play_time.timestamp())}:R>",
-            value=f"**{round(latest_play['pp'], 2)}pp\u2003combo: {latest_play['cb']}**"
-
+            value=f"**{round(latest_play['pp'])}**pp • ({latest_play['pf']}/{latest_play['gd']}/{latest_play['ok']}/{latest_play['ms']}) • **{latest_play['cb']}x**/{latest_play['pf'] + latest_play['gd'] + latest_play['ok'] + latest_play['ms']}x\n"
+            f"`{length_fmt}` • `OD: {latest_play['od']}`• BPM: {latest_play['bpm']}"
         )
 
-        embed.set_footer(text="Mapset by")
+        embed.set_footer(text=f"Mapset by {latest_play['mn']}")
         await message.edit(content=None, embed=embed)
 
 def setup(bot):
