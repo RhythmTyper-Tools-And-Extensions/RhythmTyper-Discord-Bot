@@ -383,7 +383,7 @@ This project is licensed under the [MIT License](LICENSE) - see the LICENSE file
 ## 💬 Support
 
 Need help? Have questions?
-- Join the [RhythmTyper Bot Development Server](https://discord.gg/Kc6nJWJG8v) - for bot development discussions
+- Join the [RhythmTyper Bot Development Server](https://discord.gg/c4x4NefeTW) - for bot development discussions
 - Join the [RhythmTyper Discord Server](https://discord.gg/Kc6nJWJG8v) - for the game community
 - Open an [issue](https://github.com/RhythmTyper-Tools-And-Extensions/RhythmTyper-Discord-Bot/issues)
 - Check existing [discussions](https://github.com/RhythmTyper-Tools-And-Extensions/RhythmTyper-Discord-Bot/discussions)
