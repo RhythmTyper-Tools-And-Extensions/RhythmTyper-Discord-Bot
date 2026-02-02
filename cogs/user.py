@@ -3,6 +3,8 @@ from discord import Embed
 from discord.ext import bridge, commands
 from datetime import datetime, timezone
 
+from discord.ext.bridge import BridgeContext
+
 from config import grade_emojis
 
 from utils.api import fetch_api
@@ -279,6 +281,59 @@ class User(commands.Cog):
 
         embed.set_footer(text=f"Mapset by {latest_play['mn']}")
         await message.edit(content=None, embed=embed)
+
+    @bridge.bridge_command(name="whatif")
+    async def whatif(self, ctx: BridgeContext, *args):
+        message = await ctx.respond("Fetching data...", ephemeral=True)
+
+        pp = int
+        target = None
+
+        for arg in args:
+            if arg.isdigit():
+                pp = int(arg)
+
+        try:
+            target_info = await resolve_target(ctx, target)
+        except ValueError as e:
+            await ctx.respond(str(e), ephemeral=True)
+            return
+
+        userid = target_info["userid"]
+
+        profile_data = await fetch_api(f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/profile/{userid}")
+        if not profile_data:
+            await message.edit("Failed to fetch profile data. Try again later.", ephemeral=True)
+            return
+
+        top_plays = profile_data.get("topPlays", [])
+        if not top_plays:
+            await message.edit(content="No top plays found for this user.")
+            return
+
+        i = 0
+        pp_change = None
+        for top_play in top_plays:
+            i += 1
+
+            if top_play['pp'] < pp:
+                print(i)
+
+                pp_change = pp - top_play['pp']
+                break
+
+
+        embed = Embed(colour=discord.Colour.blurple())
+        embed.set_author(
+            name=f"{profile_data['username']}",
+            url=f"https://rhythmtyper.net/user/{profile_data['userId']}",
+            icon_url=flag_url(profile_data["country"])
+        )
+
+        embed.add_field(name=f"What if {profile_data['username']} got a new {pp}pp score?", value=f"A {pp}pp score would be {profile_data['username']} **#{i}** best play.\nTheir pp would change by {round(pp_change, 2)} to {round(profile_data['pp'] + pp_change, 2)}pp\nThey would reach approx. rank #None (im too lazy to add this)")
+
+        await message.edit(content="", embed=embed)
+
 
 def setup(bot):
     bot.add_cog(User(bot))
