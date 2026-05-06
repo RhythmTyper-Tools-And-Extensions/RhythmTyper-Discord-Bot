@@ -14,7 +14,7 @@ from utils.resolve import resolve_target
 from utils.flags import flag_url
 from utils.cache import Cache
 
-lb_cache = Cache(ttl=60)
+lb_cache = Cache(ttl=300)
 
 class User(commands.Cog):
     def __init__(self, bot):
@@ -355,7 +355,7 @@ class User(commands.Cog):
                 break
 
         decay = 0.95
-        max_plays = 50
+        max_plays = 100
 
         new_top = sorted_plays.copy()
         new_top.insert(placement - 1, {'pp': pp})
@@ -370,30 +370,45 @@ class User(commands.Cog):
 
         pp_change = new_total_pp - profile_data['pp']
 
-        cache_key = "top200_global_pp"
-        lb_data = lb_cache.get(cache_key)
+        cache_key = "top500_global_pp"
+        cached = lb_cache.get(cache_key)
+        if not cached:
+            cached = {
+                "data": [],
+                "fetched_until": 0
+            }
 
-        if not lb_data:
-            lb_data = []
-            for offset in range(0, 200, 50):
-                page = await fetch_api(
-                    f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/leaderboard?limit=50&offset={offset}&sortBy=totalPP"
-                )
-                if page:
-                    lb_data.extend(page)
-            if lb_data:
-                lb_cache.set(cache_key, lb_data)
+        lb_data = cached["data"]
+        fetched_until = cached["fetched_until"]
 
         approx_rank = None
-        if lb_data:
-            for idx, entry in enumerate(lb_data, start=1):
-                if new_total_pp >= entry['totalPP']:
-                    approx_rank = idx
+        limit = 500
+        step = 50
+
+        while fetched_until < limit:
+            if len(lb_data) <= fetched_until:
+                page = await fetch_api(
+                    f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/leaderboard?limit=50&offset={fetched_until}&sortBy=totalPP"
+                )
+                if not page:
                     break
-            if approx_rank is None:
-                approx_rank = ">200"
-        else:
-            approx_rank = "Unknown"
+
+                lb_data.extend(page)
+                cached["fetched_until"] += len(page)
+                lb_cache.set(cache_key, cached)
+
+            for idx in range(fetched_until, len(lb_data)):
+                if new_total_pp >= lb_data[idx]["totalPP"]:
+                    approx_rank = idx + 1
+                    break
+            if approx_rank is not None:
+                break
+            fetched_until += step
+        if approx_rank is None:
+            if cached["fetched_until"] >= limit:
+                approx_rank = ">500"
+            else:
+                approx_rank = "Unknown"
 
         embed = Embed(colour=discord.Colour.blurple())
         embed.set_author(

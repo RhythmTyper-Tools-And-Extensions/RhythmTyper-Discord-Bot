@@ -4,7 +4,7 @@ from discord.ext import bridge, commands
 from utils.api import fetch_api
 from utils.cache import Cache
 
-cache = Cache(ttl=60)
+cache = Cache(ttl=300)
 
 class Leaderboard(commands.Cog):
     def __init__(self, bot):
