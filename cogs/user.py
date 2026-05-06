@@ -314,23 +314,12 @@ class User(commands.Cog):
         await message.edit(content=None, embed=embed)
 
     @bridge.bridge_command(name="whatif")
-    async def whatif(self, ctx, pp: str = None, target: str = None):
+    async def whatif(self, ctx, pp: int = None, target: str = None):
         message = await ctx.respond("Fetching data...", ephemeral=True)
 
         if pp is None:
             await message.edit("You must provide a PP value for >whatif.")
             return
-
-        try:
-            pp_value = float(pp)
-        except OverflowError:
-            pp_value = float("inf")
-        except ValueError:
-            await message.edit("Invalid PP value.")
-            return
-
-        if pp_value < 0:
-            pp_value = 0
 
         try:
             target_info = await resolve_target(ctx, target)
@@ -362,7 +351,7 @@ class User(commands.Cog):
         max_plays = 100
 
         new_top = sorted_plays.copy()
-        new_top.insert(placement - 1, {'pp': pp_value})
+        new_top.insert(placement - 1, {'pp': pp})
         new_top = new_top[:max_plays]
 
         if new_top:
