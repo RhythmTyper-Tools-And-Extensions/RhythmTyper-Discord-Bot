@@ -8,10 +8,13 @@ from discord.ext.bridge import BridgeContext
 from config import grade_emojis
 
 from utils.api import fetch_api
-from utils.db import fetchrow, execute
+from utils.db import fetchrow, execute, is_db_available
 from utils.logger import info, warn, error, debug
 from utils.resolve import resolve_target
 from utils.flags import flag_url
+from utils.cache import Cache
+
+lb_cache = Cache(ttl=60)
 
 class User(commands.Cog):
     def __init__(self, bot):
@@ -27,6 +30,13 @@ class User(commands.Cog):
 
     @bridge.bridge_command(name="link", description="Link your RhythmTyper account")
     async def link(self, ctx, username: str = None):
+        if not is_db_available():
+            await ctx.respond(
+                "Database is temporarily unavailable. Please try again later.",
+                ephemeral=True
+            )
+            return
+
         if not await self.is_dm(ctx):
             return
 
@@ -79,6 +89,13 @@ class User(commands.Cog):
 
     @bridge.bridge_command(name="verify", description="Verify your code in profile description")
     async def verify(self, ctx):
+        if not is_db_available():
+            await ctx.respond(
+                "Database is temporarily unavailable. Please try again later.",
+                ephemeral=True
+            )
+            return
+
         if not await self.is_dm(ctx):
             return
 
@@ -122,6 +139,13 @@ class User(commands.Cog):
 
     @bridge.bridge_command(name="unlink", description="Unlink your linked RhythmTyper account")
     async def unlink(self, ctx):
+        if not is_db_available():
+            await ctx.respond(
+                "Database is temporarily unavailable. Please try again later.",
+                ephemeral=True
+            )
+            return
+
         if not await self.is_dm(ctx):
             return
 
@@ -134,6 +158,13 @@ class User(commands.Cog):
 
     @bridge.bridge_command(name="status")
     async def status(self, ctx):
+        if not is_db_available():
+            await ctx.respond(
+                "Database is temporarily unavailable. Please try again later.",
+                ephemeral=True
+            )
+            return
+
         if not await self.is_dm(ctx):
             return
 
@@ -167,7 +198,7 @@ class User(commands.Cog):
         try:
             target_info = await resolve_target(ctx, target)
         except ValueError as e:
-            await ctx.respond(str(e), ephemeral=True)
+            await message.edit(str(e), ephemeral=True)
             return
 
         userid = target_info["userid"]
@@ -238,7 +269,7 @@ class User(commands.Cog):
         try:
             target_info = await resolve_target(ctx, target)
         except ValueError as e:
-            await ctx.respond(str(e), ephemeral=True)
+            await message.edit(str(e), ephemeral=True)
             return
 
         userid = target_info["userid"]
@@ -286,17 +317,21 @@ class User(commands.Cog):
     async def whatif(self, ctx: BridgeContext, *args):
         message = await ctx.respond("Fetching data...", ephemeral=True)
 
-        pp = int
+        pp = None
         target = None
 
         for arg in args:
             if arg.isdigit():
                 pp = int(arg)
 
+        if pp is None:
+            await message.edit("You must provide a PP value for >whatif.", ephemeral=True)
+            return
+
         try:
             target_info = await resolve_target(ctx, target)
         except ValueError as e:
-            await ctx.respond(str(e), ephemeral=True)
+            await message.edit(str(e), ephemeral=True)
             return
 
         userid = target_info["userid"]
@@ -311,17 +346,54 @@ class User(commands.Cog):
             await message.edit(content="No top plays found for this user.")
             return
 
-        i = 0
-        pp_change = None
-        for top_play in top_plays:
-            i += 1
+        placement = len(top_plays) + 1
+        sorted_plays = sorted(top_plays, key=lambda x: x['pp'], reverse=True)
 
-            if top_play['pp'] < pp:
-                print(i)
-
-                pp_change = pp - top_play['pp']
+        for i, top_play in enumerate(sorted_plays, start=1):
+            if pp > top_play['pp']:
+                placement = i
                 break
 
+        decay = 0.95
+        max_plays = 50
+
+        new_top = sorted_plays.copy()
+        new_top.insert(placement - 1, {'pp': pp})
+        new_top = new_top[:max_plays]
+
+        if new_top:
+            new_total_pp = new_top[0]['pp']
+            for i, p in enumerate(new_top[1:], start=1):
+                new_total_pp += p['pp'] * (decay ** i)
+        else:
+            new_total_pp = 0
+
+        pp_change = new_total_pp - profile_data['pp']
+
+        cache_key = "top200_global_pp"
+        lb_data = lb_cache.get(cache_key)
+
+        if not lb_data:
+            lb_data = []
+            for offset in range(0, 200, 50):
+                page = await fetch_api(
+                    f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/leaderboard?limit=50&offset={offset}&sortBy=totalPP"
+                )
+                if page:
+                    lb_data.extend(page)
+            if lb_data:
+                lb_cache.set(cache_key, lb_data)
+
+        approx_rank = None
+        if lb_data:
+            for idx, entry in enumerate(lb_data, start=1):
+                if new_total_pp >= entry['totalPP']:
+                    approx_rank = idx
+                    break
+            if approx_rank is None:
+                approx_rank = ">200"
+        else:
+            approx_rank = "Unknown"
 
         embed = Embed(colour=discord.Colour.blurple())
         embed.set_author(
@@ -330,7 +402,7 @@ class User(commands.Cog):
             icon_url=flag_url(profile_data["country"])
         )
 
-        embed.add_field(name=f"What if {profile_data['username']} got a new {pp}pp score?", value=f"A {pp}pp score would be {profile_data['username']} **#{i}** best play.\nTheir pp would change by {round(pp_change, 2)} to {round(profile_data['pp'] + pp_change, 2)}pp\nThey would reach approx. rank #None (im too lazy to add this)")
+        embed.add_field(name=f"What if {profile_data['username']} got a new {pp}pp score?", value=f"A {pp}pp score would be {profile_data['username']} **#{placement}** best play.\nTheir pp would change by {round(pp_change, 2)} to {round(profile_data['pp'] + pp_change, 2)}pp\nThey would reach approx. rank **#{approx_rank}**")
 
         await message.edit(content="", embed=embed)
 

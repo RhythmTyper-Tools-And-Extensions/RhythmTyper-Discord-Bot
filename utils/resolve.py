@@ -1,6 +1,6 @@
 from discord.ext import commands
 from utils.api import fetch_api
-from utils.db import fetchrow
+from utils.db import fetchrow, is_db_available
 
 async def resolve_target(ctx, target: str = None):
     using_discord = False
@@ -19,10 +19,14 @@ async def resolve_target(ctx, target: str = None):
             discord_id = ctx.author.id
             using_discord = True
 
-    userid = None
     username = None
 
     if using_discord:
+        if not is_db_available():
+            raise ValueError(
+                "Database is temporarily unavailable. Please provide a RhythmTyper username instead."
+            )
+
         row = await fetchrow("SELECT userid, username FROM linked_users WHERE discord_id = $1", discord_id)
         if not row:
             raise ValueError(f"{resolved_user.mention} does not have a linked RhythmTyper account.")

@@ -34,8 +34,14 @@ ACCENT = "\033[96m"
 async def on_ready():
     global cleanup_task
 
-    await init_db()
-    cleanup_task = bot.loop.create_task(cleanup_link_codes())
+    try:
+        await init_db()
+    except Exception as e:
+        warn(f"Database unavailable on startup: {e}")
+
+    from utils.db import _pool
+    if _pool:
+        cleanup_task = bot.loop.create_task(cleanup_link_codes())
 
     latency = round(bot.latency * 1000)
     users = sum(g.member_count or 0 for g in bot.guilds)
@@ -59,9 +65,6 @@ async def on_ready():
     row("Platform", f"{platform.system()} {platform.release()}")
     print()
 
-@bot.event
-async def on_disconnect():
-    await shutdown()
 
 async def shutdown():
     global shutdown_called
@@ -73,15 +76,27 @@ async def shutdown():
 
     if cleanup_task:
         cleanup_task.cancel()
-
         try:
             await cleanup_task
         except asyncio.CancelledError:
             pass
 
-    await close_api()
-    await close_db()
+    try:
+        from utils.api import _session, close_api
+        if _session and not _session.closed:
+            await close_api()
+    except Exception:
+        pass
+
+    try:
+        from utils.db import _pool, close_db
+        if _pool:
+            await close_db()
+    except Exception:
+        pass
+
     await bot.close()
+
 
 try:
     bot.run(os.getenv("TOKEN"))

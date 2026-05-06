@@ -2,6 +2,14 @@ import os, asyncpg, time, asyncio
 from utils.logger import info, error
 
 _pool: asyncpg.pool.Pool | None = None
+_db_available = True
+
+def is_db_available():
+    return _db_available
+
+def set_db_available(value: bool):
+    global _db_available
+    _db_available = value
 
 async def init_db():
     global _pool
@@ -18,6 +26,8 @@ async def init_db():
             max_size=10
         )
         info("Database pool created")
+        set_db_available(True)
+
         return _pool
     except Exception as e:
         error(f"Failed to initialize database pool: {e}")
@@ -33,29 +43,47 @@ async def close_db():
 async def fetchrow(query: str, *args):
     if _pool is None:
         raise RuntimeError("Database not initialized")
-    async with _pool.acquire() as conn:
-        return await conn.fetchrow(query, *args)
+
+    try:
+        async with _pool.acquire() as conn:
+            return await conn.fetchrow(query, *args)
+    except Exception as e:
+        set_db_available(False)
+        raise
 
 async def fetch(query: str, *args):
     if _pool is None:
         raise RuntimeError("Database not initialized")
-    async with _pool.acquire() as conn:
-        return await conn.fetch(query, *args)
+
+    try:
+        async with _pool.acquire() as conn:
+            return await conn.fetch(query, *args)
+    except Exception as e:
+        set_db_available(False)
+        raise
 
 async def execute(query: str, *args):
     if _pool is None:
         raise RuntimeError("Database not initialized")
-    async with _pool.acquire() as conn:
-        return await conn.execute(query, *args)
+
+    try:
+        async with _pool.acquire() as conn:
+            return await conn.execute(query, *args)
+    except Exception as e:
+        set_db_available(False)
+        raise
 
 async def cleanup_link_codes():
     while True:
+        if not is_db_available():
+            await asyncio.sleep(60)
+            continue
+
         try:
             await execute(
                 "DELETE FROM link_codes WHERE expires_at < $1",
                 int(time.time())
             )
-            info("Expired link codes cleaned")
             await asyncio.sleep(300)
         except asyncio.CancelledError:
             info("Link code cleanup task cancelled")
