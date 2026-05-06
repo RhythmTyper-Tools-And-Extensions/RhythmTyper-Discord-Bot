@@ -196,16 +196,16 @@ class User(commands.Cog):
         message = await ctx.respond("Fetching user...", ephemeral=True)
 
         try:
-            target_info = await resolve_target(ctx, target)
+            target_info = await resolve_target(ctx, target or ctx.author)
         except ValueError as e:
-            await message.edit(str(e), ephemeral=True)
+            await message.edit(str(e))
             return
 
         userid = target_info["userid"]
 
         profile_data = await fetch_api(f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/profile/{userid}")
         if not profile_data:
-            await message.edit("Failed to fetch profile data. Try again later.", ephemeral=True)
+            await message.edit("Failed to fetch profile data. Try again later.")
             return
 
         current_rank = profile_data['globalRank']
@@ -267,16 +267,16 @@ class User(commands.Cog):
         message = await ctx.respond("Fetching recent score...", ephemeral=True)
 
         try:
-            target_info = await resolve_target(ctx, target)
+            target_info = await resolve_target(ctx, target or ctx.author)
         except ValueError as e:
-            await message.edit(str(e), ephemeral=True)
+            await message.edit(str(e))
             return
 
         userid = target_info["userid"]
 
         profile_data = await fetch_api(f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/profile/{userid}")
         if not profile_data:
-            await message.edit("Failed to fetch profile data. Try again later.", ephemeral=True)
+            await message.edit("Failed to fetch profile data. Try again later.")
             return
 
         recent_plays = profile_data.get("recentPlays", [])
@@ -314,31 +314,24 @@ class User(commands.Cog):
         await message.edit(content=None, embed=embed)
 
     @bridge.bridge_command(name="whatif")
-    async def whatif(self, ctx: BridgeContext, *args):
+    async def whatif(self, ctx, pp: int = None, target: str = None):
         message = await ctx.respond("Fetching data...", ephemeral=True)
 
-        pp = None
-        target = None
-
-        for arg in args:
-            if arg.isdigit():
-                pp = int(arg)
-
         if pp is None:
-            await message.edit("You must provide a PP value for >whatif.", ephemeral=True)
+            await message.edit("You must provide a PP value for >whatif.")
             return
 
         try:
-            target_info = await resolve_target(ctx, target)
+            target_info = await resolve_target(ctx, target or ctx.author)
         except ValueError as e:
-            await message.edit(str(e), ephemeral=True)
+            await message.edit(str(e))
             return
 
         userid = target_info["userid"]
 
         profile_data = await fetch_api(f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/profile/{userid}")
         if not profile_data:
-            await message.edit("Failed to fetch profile data. Try again later.", ephemeral=True)
+            await message.edit("Failed to fetch profile data. Try again later.")
             return
 
         top_plays = profile_data.get("topPlays", [])
@@ -379,31 +372,35 @@ class User(commands.Cog):
             }
 
         lb_data = cached["data"]
-        fetched_until = cached["fetched_until"]
 
         approx_rank = None
         limit = 500
-        step = 50
 
-        while fetched_until < limit:
-            if len(lb_data) <= fetched_until:
+        offset = cached["fetched_until"]
+        checked_until = 0
+
+        while offset < limit:
+            if len(lb_data) <= offset:
                 page = await fetch_api(
-                    f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/leaderboard?limit=50&offset={fetched_until}&sortBy=totalPP"
+                    f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/leaderboard?limit=50&offset={offset}&sortBy=totalPP"
                 )
                 if not page:
                     break
 
                 lb_data.extend(page)
-                cached["fetched_until"] += len(page)
+                offset += len(page)
+
+                cached["fetched_until"] = offset
                 lb_cache.set(cache_key, cached)
 
-            for idx in range(fetched_until, len(lb_data)):
-                if new_total_pp >= lb_data[idx]["totalPP"]:
-                    approx_rank = idx + 1
+            while checked_until < len(lb_data):
+                if new_total_pp >= lb_data[checked_until]["totalPP"]:
+                    approx_rank = checked_until + 1
                     break
+                checked_until += 1
+
             if approx_rank is not None:
                 break
-            fetched_until += step
         if approx_rank is None:
             if cached["fetched_until"] >= limit:
                 approx_rank = ">500"
