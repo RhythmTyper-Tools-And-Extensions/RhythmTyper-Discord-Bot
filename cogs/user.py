@@ -191,7 +191,7 @@ class User(commands.Cog):
 
         await ctx.respond("No linked account and no pending verification.")
 
-    @bridge.bridge_command(name="user", description="Display a users profile")
+    @bridge.bridge_command(name="user", description="Display a users profile", aliases=["profile"])
     async def user(self, ctx, target: str = None):
         message = await ctx.respond("Fetching user...", ephemeral=True)
 

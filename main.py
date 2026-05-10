@@ -1,8 +1,7 @@
-import discord, dotenv, os, platform, signal, asyncio
+import discord, dotenv, os, platform, asyncio
 from discord.ext.bridge import Bot
 from utils.logger import info, warn, error, debug
 from utils.db import init_db, close_db, cleanup_link_codes
-from utils.api import close_api
 from asyncio import Task
 from typing import Optional
 
@@ -96,7 +95,6 @@ async def shutdown():
         pass
 
     await bot.close()
-
 
 try:
     bot.run(os.getenv("TOKEN"))
