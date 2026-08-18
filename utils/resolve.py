@@ -34,7 +34,7 @@ async def resolve_target(ctx, target: str = None):
         username = row["username"]
     else:
         data = await fetch_api(
-            f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/users/search?query={target}&limit=1"
+            f"https://api.rhythmtyper.net/v2/users/search?query={target}&limit=1"
         )
         if not data:
             raise ValueError(f"No RhythmTyper user found with username `{target}`.")

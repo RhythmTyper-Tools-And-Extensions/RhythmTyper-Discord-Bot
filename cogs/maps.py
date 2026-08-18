@@ -55,7 +55,7 @@ class Map(commands.Cog):
         message = await ctx.respond("Fetching map...")
 
         maps = await fetch_api(
-            f"https://us-central1-rhythm-typer.cloudfunctions.net/api/getBeatmaps?limit=50&status={status}&sortBy=relevance&showExplicit=true&language=all&search={keywords}")
+            f"https://api.rhythmtyper.net/getBeatmaps?limit=50&status={status}&sortBy=relevance&showExplicit=true&language=all&search={keywords}")
 
         if not maps["beatmaps"]:
             await message.edit(f"No maps found with those keywords : {keywords}")

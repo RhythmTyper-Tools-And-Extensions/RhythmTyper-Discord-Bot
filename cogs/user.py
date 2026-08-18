@@ -57,7 +57,7 @@ class User(commands.Cog):
             return
 
         data = await fetch_api(
-            f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/users/search?query={username}&limit=1"
+            f"https://api.rhythmtyper.net/v2/users/search?query={username}&limit=1"
         )
         if not data:
             await ctx.respond("Failed to fetch user data. Try again later.", ephemeral=True)
@@ -116,7 +116,7 @@ class User(commands.Cog):
             return
 
         profile_data = await fetch_api(
-            f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/profile/{userid}"
+            f"https://api.rhythmtyper.net/v2/profile/{userid}"
         )
         if not profile_data:
             await ctx.respond("Failed to fetch profile data. Try again later.", ephemeral=True)
@@ -203,7 +203,7 @@ class User(commands.Cog):
 
         userid = target_info["userid"]
 
-        profile_data = await fetch_api(f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/profile/{userid}")
+        profile_data = await fetch_api(f"https://api.rhythmtyper.net/v2/profile/{userid}")
         if not profile_data:
             await message.edit("Failed to fetch profile data. Try again later.")
             return
@@ -274,7 +274,7 @@ class User(commands.Cog):
 
         userid = target_info["userid"]
 
-        profile_data = await fetch_api(f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/profile/{userid}")
+        profile_data = await fetch_api(f"https://api.rhythmtyper.net/v2/profile/{userid}")
         if not profile_data:
             await message.edit("Failed to fetch profile data. Try again later.")
             return
@@ -329,7 +329,7 @@ class User(commands.Cog):
 
         userid = target_info["userid"]
 
-        profile_data = await fetch_api(f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/profile/{userid}")
+        profile_data = await fetch_api(f"https://api.rhythmtyper.net/v2/profile/{userid}")
         if not profile_data:
             await message.edit("Failed to fetch profile data. Try again later.")
             return
@@ -382,7 +382,7 @@ class User(commands.Cog):
         while offset < limit:
             if len(lb_data) <= offset:
                 page = await fetch_api(
-                    f"https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/leaderboard?limit=50&offset={offset}&sortBy=totalPP"
+                    f"https://api.rhythmtyper.net/v2/leaderboard?limit=50&offset={offset}&sortBy=totalPP"
                 )
                 if not page:
                     break

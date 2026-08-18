@@ -76,7 +76,7 @@ class Leaderboard(commands.Cog):
 
         if not data:
             url = (
-                "https://us-central1-rhythm-typer.cloudfunctions.net/api/v2/leaderboard"
+                "https://api.rhythmtyper.net/v2/leaderboard"
                 f"?limit={limit}&offset={offset}&sortBy={sort_by}"
             )
             if country:
