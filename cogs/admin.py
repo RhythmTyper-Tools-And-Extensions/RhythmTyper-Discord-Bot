@@ -10,7 +10,7 @@ class Admin(commands.Cog):
     @bridge.bridge_command(name="setdaily", description="Set what channel the daily map gets sent in.")
     @bridge.has_permissions(administrator=True)
     async def setdaily(self, ctx, channel: discord.TextChannel):
-        message = ctx.respond("Setting daily channel")
+        message = await ctx.respond("Setting daily channel")
 
         if not is_db_available():
             await message.edit(
