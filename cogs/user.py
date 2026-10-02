@@ -361,7 +361,7 @@ class User(commands.Cog):
         else:
             new_total_pp = 0
 
-        pp_change = new_total_pp - profile_data['pp']
+        pp_change = new_total_pp - profile_data['totalPP']
 
         cache_key = "top500_global_pp"
         cached = lb_cache.get(cache_key)
@@ -414,7 +414,7 @@ class User(commands.Cog):
             icon_url=flag_url(profile_data["country"])
         )
 
-        embed.add_field(name=f"What if {profile_data['username']} got a new {pp}pp score?", value=f"A {pp}pp score would be {profile_data['username']} **#{placement}** best play.\nTheir pp would change by {round(pp_change, 2)} to {round(profile_data['pp'] + pp_change, 2)}pp\nThey would reach approx. rank **#{approx_rank}**")
+        embed.add_field(name=f"What if {profile_data['username']} got a new {pp}pp score?", value=f"A {pp}pp score would be {profile_data['username']} **#{placement}** best play.\nTheir pp would change by {round(pp_change, 2)} to {round(profile_data['totalPP'] + pp_change, 2)}pp\nThey would reach approx. rank **#{approx_rank}**")
 
         await message.edit(content="", embed=embed)
 
